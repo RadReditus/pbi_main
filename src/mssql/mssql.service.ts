@@ -121,6 +121,10 @@ export class MssqlService implements OnModuleInit {
           encrypt: false,
           trustServerCertificate: true,
           requestTimeout: timeoutSeconds * 1000,
+          // Настройки кодировки для кириллицы
+          charset: 'utf8',
+          collation: 'Cyrillic_General_CI_AS',
+          enableArithAbort: true,
         },
         pool: {
           max: 10,

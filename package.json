@@ -8,7 +8,13 @@
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "build": "tsc -p tsconfig.json",
     "test": "jest",
-    "test:e2e": "jest --config jest.config.ts --runInBand"
+    "test:e2e": "jest --config jest.config.ts --runInBand",
+    "test:postgres": "node quick-postgres-check.js",
+    "test:postgres:full": "node test-postgres-data.js",
+    "test:postgres:tables": "node test-specific-tables.js",
+    "test:postgres:translations": "node test-translation-verification.js",
+    "test:postgres:all": "node run-all-tests.js",
+    "check:postgres": "node check-postgres-connection.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.0",
@@ -28,7 +34,7 @@
     "mssql": "^11.0.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
-    "pg": "^8.11.5",
+    "pg": "^8.16.3",
     "redis": "^4.6.12",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

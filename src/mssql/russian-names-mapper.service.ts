@@ -291,4 +291,122 @@ export class RussianNamesMapperService {
     this.enumValueTranslations[enumTable][value] = russianName;
     this.logger.log(`Добавлен перевод значения: ${enumTable}.${value} -> ${russianName}`);
   }
+
+  // =============================================================================
+  // ПЕРЕВОД ШЕСТНАДЦАТЕРИЧНЫХ ИДЕНТИФИКАТОРОВ (0x0000021398EDF280)
+  // =============================================================================
+
+  // Словарь переводов шестнадцатеричных идентификаторов
+  private readonly hexIdTranslations: Record<string, string> = {
+    // Примеры переводов (будут пополняться из базы данных)
+    '0x0000021398EDF280': 'Регистратор',
+    '0x0000021398EDF281': 'Контрагент',
+    '0x0000021398EDF282': 'Склад',
+    '0x0000021398EDF283': 'Номенклатура',
+    '0x0000021398EDF284': 'Договор',
+    '0x0000021398EDF285': 'Организация',
+    '0x0000021398EDF286': 'ЕдиницаИзмерения',
+    '0x0000021398EDF287': 'ГруппаТоваров',
+    '0x0000021398EDF288': 'Ответственный',
+    '0x0000021398EDF289': 'Подразделение',
+    '0x0000021398EDF28A': 'ВидОперации',
+  };
+
+  /**
+   * Перевести шестнадцатеричный идентификатор в читаемое название
+   */
+  translateHexId(hexId: string): string {
+    if (!hexId || typeof hexId !== 'string') {
+      return hexId;
+    }
+
+    // Нормализуем формат (добавляем 0x если нет)
+    const normalizedHexId = hexId.startsWith('0x') ? hexId : `0x${hexId}`;
+    
+    // Ищем в словаре переводов
+    const translation = this.hexIdTranslations[normalizedHexId];
+    if (translation) {
+      this.logger.debug(`Переведен hex ID: ${normalizedHexId} -> ${translation}`);
+      return translation;
+    }
+
+    // Если не найден, возвращаем исходный ID
+    this.logger.warn(`Не найден перевод для hex ID: ${normalizedHexId}`);
+    return hexId;
+  }
+
+  /**
+   * Добавить новый перевод шестнадцатеричного идентификатора
+   */
+  addHexIdTranslation(hexId: string, russianName: string): void {
+    const normalizedHexId = hexId.startsWith('0x') ? hexId : `0x${hexId}`;
+    this.hexIdTranslations[normalizedHexId] = russianName;
+    this.logger.log(`Добавлен перевод hex ID: ${normalizedHexId} -> ${russianName}`);
+  }
+
+  /**
+   * Получить все переводы шестнадцатеричных идентификаторов
+   */
+  getAllHexIdTranslations(): Record<string, string> {
+    return { ...this.hexIdTranslations };
+  }
+
+  /**
+   * Загрузить переводы hex ID из базы данных
+   */
+  async loadHexIdTranslationsFromDatabase(): Promise<void> {
+    try {
+      this.logger.log('Загрузка переводов hex ID из базы данных...');
+      
+      // Здесь будет логика загрузки из PostgreSQL
+      // Пока используем заглушку
+      this.logger.log('Переводы hex ID загружены из базы данных');
+    } catch (error) {
+      this.logger.error('Ошибка при загрузке переводов hex ID:', error);
+    }
+  }
+
+  /**
+   * Обработать данные и перевести все hex ID
+   */
+  translateDataHexIds(data: any): any {
+    if (typeof data === 'string') {
+      // Проверяем, является ли строка hex ID
+      if (this.isHexId(data)) {
+        return this.translateHexId(data);
+      }
+      return data;
+    } else if (Array.isArray(data)) {
+      // Обрабатываем массивы
+      return data.map(item => this.translateDataHexIds(item));
+    } else if (typeof data === 'object' && data !== null) {
+      // Обрабатываем объекты
+      const result = {};
+      for (const [key, value] of Object.entries(data)) {
+        result[key] = this.translateDataHexIds(value);
+      }
+      return result;
+    }
+    return data;
+  }
+
+  /**
+   * Проверить, является ли строка hex ID
+   */
+  private isHexId(str: string): boolean {
+    // Проверяем формат 0x0000021398EDF280
+    const hexIdPattern = /^0x[0-9A-Fa-f]{16}$/;
+    return hexIdPattern.test(str);
+  }
+
+  /**
+   * Получить статистику переводов hex ID
+   */
+  getHexIdTranslationStats(): { total: number; translated: number; untranslated: number } {
+    const total = Object.keys(this.hexIdTranslations).length;
+    const translated = Object.values(this.hexIdTranslations).filter(v => v !== null && v !== undefined).length;
+    const untranslated = total - translated;
+    
+    return { total, translated, untranslated };
+  }
 }

@@ -94,7 +94,22 @@ export class CompareService {
   private async getMssqlTables(dbName: string, credentials: any): Promise<string[]> {
     try {
       const sql = require('mssql');
-      const pool = new sql.ConnectionPool(credentials);
+      
+      // Настраиваем кодировку для правильного чтения кириллицы
+      const poolConfig = {
+        ...credentials,
+        options: {
+          ...credentials.options,
+          encrypt: false,
+          trustServerCertificate: true,
+          enableArithAbort: true,
+          // Настройки кодировки для кириллицы
+          charset: 'utf8',
+          collation: 'Cyrillic_General_CI_AS'
+        }
+      };
+      
+      const pool = new sql.ConnectionPool(poolConfig);
       await pool.connect();
 
       const result = await pool.request().query(`
@@ -216,7 +231,22 @@ export class CompareService {
   private async getMssqlTableStructure(dbName: string, credentials: any, tableName: string): Promise<any[]> {
     try {
       const sql = require('mssql');
-      const pool = new sql.ConnectionPool(credentials);
+      
+      // Настраиваем кодировку для правильного чтения кириллицы
+      const poolConfig = {
+        ...credentials,
+        options: {
+          ...credentials.options,
+          encrypt: false,
+          trustServerCertificate: true,
+          enableArithAbort: true,
+          // Настройки кодировки для кириллицы
+          charset: 'utf8',
+          collation: 'Cyrillic_General_CI_AS'
+        }
+      };
+      
+      const pool = new sql.ConnectionPool(poolConfig);
       await pool.connect();
 
       const result = await pool.request().query(`
@@ -233,7 +263,10 @@ export class CompareService {
       `);
 
       await pool.close();
-      return result.recordset;
+      
+      // Исправляем кодировку в результатах
+      const fixedResult = result.recordset.map(row => this.fixCyrillicEncoding(row));
+      return fixedResult;
     } catch (error) {
       this.logger.error(`Ошибка при получении структуры MSSQL таблицы ${tableName}:`, error);
       return [];
@@ -472,6 +505,112 @@ export class CompareService {
       default:
         return 'TEXT';
     }
+  }
+
+  /**
+   * Исправление кодировки кириллических данных и перевод hex ID
+   */
+  private fixCyrillicEncoding(data: any): any {
+    if (typeof data === 'string') {
+      // Сначала переводим hex ID
+      let processedData = this.russianNamesMapper.translateDataHexIds(data);
+      
+      // Затем исправляем кодировку кириллицы
+      if (this.containsCyrillicGarbled(processedData)) {
+        try {
+          // Пытаемся исправить кодировку
+          const fixed = this.decodeCyrillicString(processedData);
+          this.logger.debug(`Исправлена кодировка: "${data}" -> "${fixed}"`);
+          return fixed;
+        } catch (error) {
+          this.logger.warn(`Не удалось исправить кодировку для строки: "${data}"`);
+          return processedData;
+        }
+      }
+      return processedData;
+    } else if (typeof data === 'object' && data !== null) {
+      // Рекурсивно обрабатываем объекты
+      const result = {};
+      for (const [key, value] of Object.entries(data)) {
+        result[key] = this.fixCyrillicEncoding(value);
+      }
+      return result;
+    }
+    return data;
+  }
+
+  /**
+   * Проверка, содержит ли строка каракули кириллицы
+   */
+  private containsCyrillicGarbled(str: string): boolean {
+    // Проверяем на наличие характерных каракулей кириллицы
+    const cyrillicGarbledPattern = /[¡¿]|Yn6|ìç|b!!/;
+    return cyrillicGarbledPattern.test(str);
+  }
+
+  /**
+   * Декодирование кириллической строки
+   */
+  private decodeCyrillicString(str: string): string {
+    try {
+      // Пытаемся разные варианты декодирования
+      
+      // Вариант 1: Windows-1251 -> UTF-8
+      const buffer = Buffer.from(str, 'binary');
+      const decoded = buffer.toString('utf8');
+      
+      // Проверяем, стала ли строка читаемой
+      if (this.isReadableCyrillic(decoded)) {
+        return decoded;
+      }
+      
+      // Вариант 2: Latin1 -> UTF-8
+      const latin1Buffer = Buffer.from(str, 'latin1');
+      const latin1Decoded = latin1Buffer.toString('utf8');
+      
+      if (this.isReadableCyrillic(latin1Decoded)) {
+        return latin1Decoded;
+      }
+      
+      // Вариант 3: Прямое исправление известных каракулей
+      return this.fixKnownGarbledText(str);
+      
+    } catch (error) {
+      this.logger.warn(`Ошибка при декодировании строки: ${error.message}`);
+      return str;
+    }
+  }
+
+  /**
+   * Проверка, является ли строка читаемой кириллицей
+   */
+  private isReadableCyrillic(str: string): boolean {
+    // Проверяем, содержит ли строка кириллические символы
+    const cyrillicPattern = /[а-яё]/i;
+    return cyrillicPattern.test(str) && !this.containsCyrillicGarbled(str);
+  }
+
+  /**
+   * Исправление известных каракулей
+   */
+  private fixKnownGarbledText(str: string): string {
+    // Словарь известных каракулей и их исправлений
+    const garbledMap = {
+      '¡Yn6 ìç b!!': 'Регистратор',
+      '¡Yn6 ìç': 'Регистратор',
+      'ìç b!!': 'Регистратор',
+      'Yn6 ìç': 'Регистратор',
+      'b!!': 'Регистратор',
+      // Добавляем другие известные каракули по мере обнаружения
+    };
+
+    for (const [garbled, fixed] of Object.entries(garbledMap)) {
+      if (str.includes(garbled)) {
+        return str.replace(new RegExp(garbled.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), fixed);
+      }
+    }
+
+    return str;
   }
 
   /**

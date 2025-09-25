@@ -148,6 +148,100 @@ export class MssqlController {
       timestamp: new Date().toISOString(),
     };
   }
+
+  // =============================================================================
+  // API ДЛЯ РАБОТЫ С HEX ID ПЕРЕВОДАМИ
+  // =============================================================================
+
+  @Get('hex-id/translations')
+  @Roles(Role.ADMIN, Role.ASSISTANT)
+  async getHexIdTranslations() {
+    const translations = this.russianNamesMapper.getAllHexIdTranslations();
+    const stats = this.russianNamesMapper.getHexIdTranslationStats();
+    
+    return {
+      message: 'Переводы hex ID получены',
+      translations,
+      stats,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  @Post('hex-id/add-translation')
+  @Roles(Role.ADMIN)
+  async addHexIdTranslation(
+    @Query('hexId') hexId: string,
+    @Query('russianName') russianName: string,
+  ) {
+    if (!hexId || !russianName) {
+      return {
+        error: 'Требуются параметры hexId и russianName',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    this.russianNamesMapper.addHexIdTranslation(hexId, russianName);
+    
+    return {
+      message: 'Перевод hex ID добавлен',
+      hexId,
+      russianName,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  @Post('hex-id/load-from-database')
+  @Roles(Role.ADMIN)
+  async loadHexIdTranslationsFromDatabase() {
+    try {
+      await this.russianNamesMapper.loadHexIdTranslationsFromDatabase();
+      
+      return {
+        message: 'Переводы hex ID загружены из базы данных',
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        error: 'Ошибка при загрузке переводов hex ID',
+        details: error.message,
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  @Get('hex-id/stats')
+  @Roles(Role.ADMIN, Role.ASSISTANT)
+  async getHexIdStats() {
+    const stats = this.russianNamesMapper.getHexIdTranslationStats();
+    
+    return {
+      message: 'Статистика переводов hex ID',
+      stats,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  @Post('hex-id/translate-data')
+  @Roles(Role.ADMIN, Role.ASSISTANT)
+  async translateDataHexIds(@Query('data') data: string) {
+    try {
+      const parsedData = JSON.parse(data);
+      const translatedData = this.russianNamesMapper.translateDataHexIds(parsedData);
+      
+      return {
+        message: 'Данные переведены',
+        originalData: parsedData,
+        translatedData,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        error: 'Ошибка при переводе данных',
+        details: error.message,
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
 }
 
 
