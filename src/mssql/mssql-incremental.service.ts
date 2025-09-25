@@ -247,8 +247,20 @@ export class MssqlIncrementalService implements OnModuleInit {
       this.logger.log(`Timestamp column for ${tableName}: ${timestampColumn || 'none'}`);
     } catch (error) {
       this.logger.error(`Error querying table structure for ${tableName}:`, error.message);
-      // Используем значения по умолчанию
-      primaryKeyColumn = 'id';
+      // Проверяем, есть ли колонка 'id' в таблице
+      try {
+        const testResult = await pool.request().query(`SELECT TOP 1 * FROM "${tableName}"`);
+        const columns = Object.keys(testResult.recordset[0] || {});
+        if (columns.includes('id')) {
+          primaryKeyColumn = 'id';
+        } else {
+          primaryKeyColumn = columns[0] || 'id'; // Используем первую колонку или 'id'
+        }
+        this.logger.log(`Using column '${primaryKeyColumn}' as primary key for ${tableName}`);
+      } catch (testError) {
+        this.logger.error(`Cannot determine primary key for ${tableName}, using 'id' as fallback`);
+        primaryKeyColumn = 'id';
+      }
       timestampColumn = null;
     }
 
@@ -316,7 +328,26 @@ export class MssqlIncrementalService implements OnModuleInit {
     await this.clearPostgresTable(dbName, tableName);
     
     // Получаем все данные из MSSQL
-    const allDataResult = await pool.request().query(`SELECT * FROM "${tableName}" ORDER BY "${tracker.primaryKeyColumn}"`);
+    let query: string;
+    try {
+      // Тестируем, есть ли колонка в таблице
+      const testResult = await pool.request().query(`SELECT TOP 1 * FROM "${tableName}"`);
+      const columns = Object.keys(testResult.recordset[0] || {});
+      
+      if (columns.includes(tracker.primaryKeyColumn)) {
+        // Колонка существует - сортируем по ней
+        query = `SELECT * FROM "${tableName}" ORDER BY "${tracker.primaryKeyColumn}"`;
+      } else {
+        // Колонки нет - получаем все записи без сортировки
+        query = `SELECT * FROM "${tableName}"`;
+      }
+    } catch (error) {
+      // Если не можем получить структуру - получаем все записи
+      query = `SELECT * FROM "${tableName}"`;
+    }
+    
+    this.logger.log(`Executing full sync query: ${query}`);
+    const allDataResult = await pool.request().query(query);
     const allRecords = allDataResult.recordset;
     
     // Обрабатываем через систему Records для фильтрации
@@ -349,12 +380,29 @@ export class MssqlIncrementalService implements OnModuleInit {
   ): Promise<MssqlIncrementalResult> {
     this.logger.log(`Performing incremental sync for ${tableName}`);
     
-    // Получаем новые записи с ID больше последнего обработанного
-    const newRecordsResult = await pool.request().query(`
-      SELECT * FROM "${tableName}" 
-      WHERE "${tracker.primaryKeyColumn}" > ${tracker.lastProcessedRecordId}
-      ORDER BY "${tracker.primaryKeyColumn}"
-    `);
+    // Проверяем, существует ли колонка первичного ключа в таблице
+    let query: string;
+    try {
+      // Тестируем, есть ли колонка в таблице
+      const testResult = await pool.request().query(`SELECT TOP 1 * FROM "${tableName}"`);
+      const columns = Object.keys(testResult.recordset[0] || {});
+      
+      if (columns.includes(tracker.primaryKeyColumn)) {
+        // Колонка существует - используем инкрементальную логику
+        query = `SELECT * FROM "${tableName}" 
+          WHERE "${tracker.primaryKeyColumn}" > ${tracker.lastProcessedRecordId}
+          ORDER BY "${tracker.primaryKeyColumn}"`;
+      } else {
+        // Колонки нет - получаем все записи без сортировки
+        query = `SELECT * FROM "${tableName}"`;
+      }
+    } catch (error) {
+      // Если не можем получить структуру - получаем все записи
+      query = `SELECT * FROM "${tableName}"`;
+    }
+    
+    this.logger.log(`Executing query: ${query}`);
+    const newRecordsResult = await pool.request().query(query);
     
     const newRecords = newRecordsResult.recordset;
     this.logger.log(`Found ${newRecords.length} new records for ${tableName}`);
