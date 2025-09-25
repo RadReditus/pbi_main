@@ -1,18 +1,22 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MssqlService } from './mssql.service';
+import { MssqlIncrementalService } from './mssql-incremental.service';
 import { MssqlController } from './mssql.controller';
+import { MssqlChangeTracker } from './mssql-change-tracker.entity';
 import { ConfigModule } from '../config/config.module';
 import { HealthModule } from '../health/health.module';
+import { RecordsModule } from '../records/records.module';
 
 @Module({
   imports: [
     ConfigModule,
     HealthModule,
-    // Не создаем подключение заранее - будем создавать динамически
+    RecordsModule,
+    TypeOrmModule.forFeature([MssqlChangeTracker], 'users'),
   ],
-  providers: [MssqlService],
+  providers: [MssqlService, MssqlIncrementalService],
   controllers: [MssqlController],
-  exports: [MssqlService],
+  exports: [MssqlService, MssqlIncrementalService],
 })
 export class MssqlModule {}
