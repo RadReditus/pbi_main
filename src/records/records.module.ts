@@ -14,5 +14,6 @@ import { TagsModule } from '../tags/tags.module';
   ],
   controllers: [RecordsController],
   providers: [RecordsService],
+  exports: [RecordsService],
 })
 export class RecordsModule {}
