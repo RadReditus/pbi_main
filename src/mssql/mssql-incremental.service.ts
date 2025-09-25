@@ -211,30 +211,46 @@ export class MssqlIncrementalService implements OnModuleInit {
   private async createChangeTracker(dbName: string, tableName: string, pool: mssql.ConnectionPool): Promise<MssqlChangeTracker> {
     this.logger.log(`Creating change tracker for ${dbName}.${tableName}`);
     
-    // Определяем первичный ключ и колонку времени
-    const primaryKeyResult = await pool.request().query(`
-      SELECT COLUMN_NAME
-      FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-      WHERE TABLE_NAME = '${tableName}' AND CONSTRAINT_NAME LIKE 'PK_%'
-      ORDER BY ORDINAL_POSITION
-    `);
+    let primaryKeyColumn = 'id';
+    let timestampColumn = null;
+    
+    try {
+      // Определяем первичный ключ и колонку времени
+      this.logger.log(`Querying primary key for table ${tableName}`);
+      const primaryKeyResult = await pool.request().query(`
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+        WHERE TABLE_NAME = '${tableName}' AND CONSTRAINT_NAME LIKE 'PK_%'
+        ORDER BY ORDINAL_POSITION
+      `);
 
-    const primaryKeyColumn = primaryKeyResult.recordset.length > 0 
-      ? primaryKeyResult.recordset[0].COLUMN_NAME 
-      : 'id';
+      primaryKeyColumn = primaryKeyResult.recordset.length > 0 
+        ? primaryKeyResult.recordset[0].COLUMN_NAME 
+        : 'id';
 
-    // Ищем колонку времени (datetime, timestamp и т.д.)
-    const timestampResult = await pool.request().query(`
-      SELECT COLUMN_NAME
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_NAME = '${tableName}' 
-        AND (DATA_TYPE IN ('datetime', 'datetime2', 'timestamp') OR COLUMN_NAME LIKE '%date%' OR COLUMN_NAME LIKE '%time%')
-      ORDER BY ORDINAL_POSITION
-    `);
+      this.logger.log(`Primary key column for ${tableName}: ${primaryKeyColumn}`);
 
-    const timestampColumn = timestampResult.recordset.length > 0 
-      ? timestampResult.recordset[0].COLUMN_NAME 
-      : null;
+      // Ищем колонку времени (datetime, timestamp и т.д.)
+      this.logger.log(`Querying timestamp columns for table ${tableName}`);
+      const timestampResult = await pool.request().query(`
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = '${tableName}' 
+          AND (DATA_TYPE IN ('datetime', 'datetime2', 'timestamp') OR COLUMN_NAME LIKE '%date%' OR COLUMN_NAME LIKE '%time%')
+        ORDER BY ORDINAL_POSITION
+      `);
+
+      timestampColumn = timestampResult.recordset.length > 0 
+        ? timestampResult.recordset[0].COLUMN_NAME 
+        : null;
+
+      this.logger.log(`Timestamp column for ${tableName}: ${timestampColumn || 'none'}`);
+    } catch (error) {
+      this.logger.error(`Error querying table structure for ${tableName}:`, error.message);
+      // Используем значения по умолчанию
+      primaryKeyColumn = 'id';
+      timestampColumn = null;
+    }
 
     const tracker = this.changeTrackerRepo.create({
       databaseName: dbName,
@@ -257,9 +273,19 @@ export class MssqlIncrementalService implements OnModuleInit {
     tracker: MssqlChangeTracker
   ): Promise<'full' | 'incremental' | 'skip'> {
     
-    // Получаем текущее количество записей в MSSQL
-    const countResult = await pool.request().query(`SELECT COUNT(*) as total FROM "${tableName}"`);
-    const currentCount = countResult.recordset[0].total;
+    let currentCount = 0;
+    
+    try {
+      // Получаем текущее количество записей в MSSQL
+      this.logger.log(`Counting records in table ${tableName}`);
+      const countResult = await pool.request().query(`SELECT COUNT(*) as total FROM "${tableName}"`);
+      currentCount = countResult.recordset[0].total;
+      this.logger.log(`Table ${tableName} has ${currentCount} records`);
+    } catch (error) {
+      this.logger.error(`Error counting records in table ${tableName}:`, error.message);
+      this.logger.log(`Skipping table ${tableName} due to error`);
+      return 'skip';
+    }
 
     // Если это первая загрузка или количество записей уменьшилось
     if (tracker.processedRecordsCount === 0 || currentCount < tracker.totalRecordsCount) {
