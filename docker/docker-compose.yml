@@ -1,0 +1,117 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d postgres || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    restart: unless-stopped
+
+  # OpenVPN клиент (gluetun)
+  vpn:
+    image: qmcgaw/gluetun:v3
+    container_name: openvpn
+    cap_add: [NET_ADMIN]
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - ./vpn:/gluetun
+    environment:
+      - VPN_SERVICE_PROVIDER=custom
+      - VPN_TYPE=openvpn
+      - OPENVPN_CUSTOM_CONFIG=/gluetun/client.ovpn
+      - OPENVPN_PROTOCOL=tcp
+      - OPENVPN_VERBOSITY=4
+      - OPENVPN_USER=1C-PowerBI
+      - OPENVPN_PASSWORD=i!8FJD@TQJ-e
+      # Разрешаем исходящий трафик к локалкам (чтобы не душился firewall gluetun)
+      - FIREWALL_OUTBOUND_SUBNETS=172.16.0.0/12,10.0.0.0/8,192.168.0.0/16
+      # Разрешаем вход на порт API (в этот контейнер будут приходить запросы от фронта/хоста)
+      - FIREWALL_INPUT_PORTS=3000
+      # DNS оставляем docker'овский резолвер, чтобы резолвилось имя 1С
+      - DOT=off
+      - DNS_KEEP_NAMESERVER=on
+      # Healthcheck/тайминги VPN
+      - HEALTH_TARGET_ADDRESS=88.204.153.34:1194
+      - HEALTH_VPN_DURATION_INITIAL=30s
+      - HEALTH_VPN_DURATION_ADDITIONAL=60s
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9999 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    # Публикуем порт API тут, т.к. api делит сетевой namespace с vpn
+    ports:
+      - "3001:3000"
+    extra_hosts:
+      - "rts-vsrv03.rts.kz:172.22.0.40"
+    restart: unless-stopped
+
+  # API: весь трафик через VPN (делит network namespace с vpn)
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: npm run start
+    env_file:
+      - ../.env
+    environment:
+      # Переопределяем только OData сервисы - отключаем их
+      SOURCE1C_ENABLE: "false"
+      GET_SCOPE_ONEC_ENABLE: "false"
+    network_mode: "service:vpn"
+    depends_on:
+      vpn:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mongo:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_KEY: "0123456789abcdef0123456789abcdef"
+    container_name: docker-frontend-1
+    ports:
+      - "8080:80"
+    # Монтируем свой конфиг nginx с проксированием на openvpn:3000
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      # нам нужен именно vpn, т.к. апстрим — openvpn:3000
+      vpn:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  mongodata:

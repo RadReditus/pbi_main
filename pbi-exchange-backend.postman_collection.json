@@ -1,0 +1,331 @@
+{
+  "info": {
+    "_postman_id": "bd5aa278-7a6e-45c2-9c3a-20a97d2c2ee1",
+    "name": "PBI Exchange Backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Коллекция запросов по ТЗ: пользователи/роли (JWT), теги, ingest/promote, экспорт (x-api-key), OData (Mongo raw), логирование, health."
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /api/v1/auth/login  (получить JWT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "try {",
+                  "  const json = pm.response.json();",
+                  "  if (json && json.accessToken) {",
+                  "    pm.environment.set('jwtToken', json.accessToken);",
+                  "    pm.test('JWT сохранён в окружение', function () { pm.expect(!!json.accessToken).to.be.true; });",
+                  "  }",
+                  "} catch(e) { /* ignore */ }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "description": "Логин админа. Токен сохранится в переменную {{jwtToken}} автоматически."
+          }
+        },
+        {
+          "name": "GET /api/v1/auth/me (JWT)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users (JWT)",
+      "item": [
+        {
+          "name": "POST /api/v1/users  (создать пользователя)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"assistant@example.com\",\n  \"password\": \"pass123\",\n  \"roles\": [\"ASSISTANT\"]\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/users",
+            "description": "Доступно ADMIN и ASSISTANT."
+          }
+        },
+        {
+          "name": "GET /api/v1/users  (список)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/users",
+            "description": "Доступно ADMIN и ASSISTANT."
+          }
+        },
+        {
+          "name": "PATCH /api/v1/users/:id/roles  (сменить роли)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwtToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/:id/roles",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "v1", "users", ":id", "roles" ],
+              "variable": [ { "key": "id", "value": "<USER_ID>" } ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roles\": [\"USER\", \"ASSISTANT\"]\n}"
+            },
+            "description": "Доступно только ADMIN."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tags",
+      "item": [
+        {
+          "name": "POST /api/v1/tags  (создать тег)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ignore_milk\",\n  \"action\": \"IGNORE\",\n  \"conditions\": {\n    \"type\": \"Поступление\",\n    \"where\": { \"field\": \"Номенклатура\", \"contains\": \"молоко\" }\n  }\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/tags",
+            "description": "Теги без аутентификации."
+          }
+        },
+        {
+          "name": "GET /api/v1/tags  (список активных тегов)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/tags"
+          }
+        },
+        {
+          "name": "POST /api/v1/tags  (MASK пример)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"mask_price\",\n  \"action\": \"MASK\",\n  \"conditions\": { \"type\": \"Поступление\" },\n  \"masks\": { \"Сумма\": \"***\" }\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/tags"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Records",
+      "item": [
+        {
+          "name": "POST /api/v1/records/ingest  (загрузка в filtered)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"uid\": \"1c-001\", \"type\": \"Поступление\", \"payload\": { \"Номенклатура\": \"молоко 2.5%\", \"Сумма\": 1000 } },\n    { \"uid\": \"1c-002\", \"type\": \"Поступление\", \"payload\": { \"Номенклатура\": \"кефир\", \"Сумма\": 1200 } }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/records/ingest"
+          }
+        },
+        {
+          "name": "POST /api/v1/records/promote  (filtered -> tagged, применить теги)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ }" },
+            "url": "{{baseUrl}}/api/v1/records/promote",
+            "description": "Если не передавать ids, возьмёт до 1000 записей из filtered."
+          }
+        },
+        {
+          "name": "GET /api/v1/records/filtered  (x-api-key)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/records/filtered"
+          }
+        },
+        {
+          "name": "GET /api/v1/records/tagged  (x-api-key)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/records/tagged"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Export (x-api-key)",
+      "item": [
+        {
+          "name": "GET /api/v1/export/json",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/export/json"
+          }
+        },
+        {
+          "name": "GET /api/v1/export/sql",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/export/sql"
+          }
+        }
+      ]
+    },
+    {
+      "name": "OData",
+      "item": [
+        {
+          "name": "POST /api/v1/odata/test  (быстрый превью из 1С)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"baseUrl\": \"http://rts-vsrv03/RTS_Decaux_Buh_2021/odata/standard.odata/\",\n  \"username\": \"Power_BI\",\n  \"password\": \"Y#632754265740oq\",\n  \"endpoint\": \"Catalog_Номенклатура\",\n  \"top\": 5\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/odata/test"
+          }
+        },
+        {
+          "name": "POST /api/v1/odata/sources  (сохранить источник, x-api-key)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Decaux_Buh_2021\",\n  \"baseUrl\": \"http://rts-vsrv03/RTS_Decaux_Buh_2021/odata/standard.odata/\",\n  \"username\": \"Power_BI\",\n  \"password\": \"Y#632754265740oq\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/odata/sources"
+          }
+        },
+        {
+          "name": "GET /api/v1/odata/sources  (x-api-key)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/odata/sources"
+          }
+        },
+        {
+          "name": "GET /api/v1/odata/fetch  (в Mongo raw, x-api-key)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/odata/fetch?sourceId={{sourceId}}&endpoint=Catalog_Номенклатура&mode=full",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "v1", "odata", "fetch" ],
+              "query": [
+                { "key": "sourceId", "value": "{{sourceId}}" },
+                { "key": "endpoint", "value": "Catalog_Номенклатура" },
+                { "key": "mode", "value": "full" }
+              ]
+            },
+            "description": "Подставь {{sourceId}} из ответа на POST /odata/sources."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Logs",
+      "item": [
+        {
+          "name": "POST /api/v1/logs  (записать лог + флаг)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"level\": \"info\",\n  \"message\": \"manual check\",\n  \"flag\": \"1c_edit\",\n  \"meta\": { \"foo\": \"bar\" },\n  \"toFile\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/logs"
+          }
+        },
+        {
+          "name": "GET /api/v1/logs  (последние 100)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/logs"
+          }
+        }
+      ]
+    }
+  ],
+  "auth": { "type": "noauth" },
+  "event": []
+}

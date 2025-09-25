@@ -1,0 +1,44 @@
+/* --- базовые стили, чтобы всё выглядело и не падало --- */
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #f5f7fb;
+  color: #111;
+}
+
+/* карточки / заголовки / инпуты / кнопки */
+.card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; }
+.h1 { font-size:1.5rem; font-weight:600; }
+.h2 { font-size:1.2rem; font-weight:600; }
+
+.input {
+  width:100%;
+  border:1px solid #d1d5db;
+  border-radius:8px;
+  padding:10px 12px;
+  background:#fff;
+}
+.input:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.2); }
+
+.btn {
+  display:inline-flex; align-items:center; gap:8px;
+  border:1px solid #2563eb; background:#2563eb; color:#fff;
+  padding:8px 12px; border-radius:10px; cursor:pointer;
+}
+.btn:disabled { opacity:.6; cursor:not-allowed; }
+.btn-danger { border-color:#dc2626; background:#dc2626; }
+
+/* утилиты (хватает для текущих страниц) */
+.grid { display:grid; }
+.gap-4 { gap:16px; }
+.space-y-3 > * + * { margin-top:12px; }
+.space-y-4 > * + * { margin-top:16px; }
+.rounded { border-radius:8px; }
+.p-3 { padding:12px; }
+.text-sm { font-size:.9rem; }
+.overflow-auto { overflow:auto; }
+.bg-gray-900 { background:#111; }
+.text-gray-100 { color:#eee; }
+@media (min-width:1024px){ .lg\:grid-cols-2 { grid-template-columns:1fr 1fr; } }

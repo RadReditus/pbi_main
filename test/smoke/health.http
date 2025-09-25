@@ -1,0 +1,2 @@
+### Быстрый дымовой тест
+GET http://localhost:3000/api/v1/tags
