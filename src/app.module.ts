@@ -35,6 +35,7 @@ import { MonitoringModule } from './monitoring/monitoring.module';
 import { SyncModule } from './sync/sync.module';
 import { HealthModule } from './health/health.module';
 import { MssqlModule } from './mssql/mssql.module';
+import { CompareModule } from './compare/compare.module';
 import { DataSource } from 'typeorm';
 
 @Module({
@@ -85,6 +86,7 @@ import { DataSource } from 'typeorm';
     SyncModule,
     HealthModule,
     MssqlModule,
+    CompareModule,
     BootstrapModule,
   ],
   controllers: [HealthController],
