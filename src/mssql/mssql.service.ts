@@ -73,7 +73,8 @@ export class MssqlService implements OnModuleInit {
       const { mssqlLaunchDbLoad, mssqlCredentials, mssqlTimeoutSeconds, mssqlBatchSize, mssqlBatchDelaySeconds } = require('../config/settings');
 
       this.logger.log(`MSSQL Launch DB Load: ${JSON.stringify(mssqlLaunchDbLoad)}`);
-      this.logger.log(`MSSQL Credentials: ${JSON.stringify(mssqlCredentials)}`);
+      this.logger.log(`MSSQL Credentials keys: ${Object.keys(mssqlCredentials).join(', ')}`);
+      this.logger.log(`MSSQL Credentials: ${JSON.stringify(mssqlCredentials, null, 2)}`);
 
       // Обрабатываем каждую базу из launch_db_load
       for (const dbConfig of mssqlLaunchDbLoad) {
