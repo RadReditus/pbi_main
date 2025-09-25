@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { ConfigService } from '../config/config.service';
 import { ServiceStatusService } from '../health/service-status.service';
+import { RussianNamesMapperService } from './russian-names-mapper.service';
 import * as mssql from 'mssql';
 
 @Injectable()
@@ -11,6 +12,7 @@ export class MssqlService implements OnModuleInit {
   constructor(
     private readonly configService: ConfigService,
     private readonly serviceStatusService: ServiceStatusService,
+    private readonly russianNamesMapper: RussianNamesMapperService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -239,25 +241,48 @@ export class MssqlService implements OnModuleInit {
 
       await dbDataSource.initialize();
 
-      // Создаем SQL для создания таблицы
+      // Получаем русские названия
+      const russianTableName = this.russianNamesMapper.getPostgresTableName(tableName);
+      const russianTableDisplayName = this.russianNamesMapper.getTableRussianName(tableName);
+
+      // Создаем SQL для создания таблицы с русскими названиями
       const columnDefinitions = columns.map(col => {
         let pgType = this.mapMssqlToPostgresType(col.DATA_TYPE, col.CHARACTER_MAXIMUM_LENGTH);
         let nullable = col.IS_NULLABLE === 'YES' ? '' : 'NOT NULL';
         
-        // Логируем маппинг типов данных
-        this.logger.log(`Column mapping for ${tableName}.${col.COLUMN_NAME}: MSSQL type "${col.DATA_TYPE}" (length: ${col.CHARACTER_MAXIMUM_LENGTH}) -> PostgreSQL type "${pgType}"`);
+        // Получаем русское название поля
+        const russianFieldName = this.russianNamesMapper.getPostgresFieldName(col.COLUMN_NAME);
+        const russianFieldDisplayName = this.russianNamesMapper.getFieldRussianName(col.COLUMN_NAME);
         
-        return `"${col.COLUMN_NAME}" ${pgType} ${nullable}`.trim();
+        // Логируем маппинг типов данных и названий
+        this.logger.log(`Column mapping for ${tableName}.${col.COLUMN_NAME}: MSSQL type "${col.DATA_TYPE}" (length: ${col.CHARACTER_MAXIMUM_LENGTH}) -> PostgreSQL type "${pgType}"`);
+        this.logger.log(`Field name mapping: ${col.COLUMN_NAME} -> ${russianFieldName} (${russianFieldDisplayName})`);
+        
+        return `"${russianFieldName}" ${pgType} ${nullable}`.trim();
       }).join(',\n  ');
 
+      // Добавляем комментарии к таблице и полям
       const createTableSql = `
-        CREATE TABLE IF NOT EXISTS "${tableName}" (
+        CREATE TABLE IF NOT EXISTS "${russianTableName}" (
           ${columnDefinitions}
         )
       `;
 
       await dbDataSource.query(createTableSql);
-      this.logger.log(`Created PostgreSQL table: ${tableName} in database: ${dbName}`);
+      
+      // Добавляем комментарий к таблице
+      const tableCommentSql = `COMMENT ON TABLE "${russianTableName}" IS '${russianTableDisplayName}'`;
+      await dbDataSource.query(tableCommentSql);
+      
+      // Добавляем комментарии к полям
+      for (const col of columns) {
+        const russianFieldName = this.russianNamesMapper.getPostgresFieldName(col.COLUMN_NAME);
+        const russianFieldDisplayName = this.russianNamesMapper.getFieldRussianName(col.COLUMN_NAME);
+        const fieldCommentSql = `COMMENT ON COLUMN "${russianTableName}"."${russianFieldName}" IS '${russianFieldDisplayName}'`;
+        await dbDataSource.query(fieldCommentSql);
+      }
+      
+      this.logger.log(`Created PostgreSQL table: ${russianTableName} (${russianTableDisplayName}) in database: ${dbName}`);
 
       await dbDataSource.destroy();
     } catch (error) {
@@ -311,22 +336,29 @@ export class MssqlService implements OnModuleInit {
 
       await dbDataSource.initialize();
 
+      // Получаем русские названия
+      const russianTableName = this.russianNamesMapper.getPostgresTableName(tableName);
+      const russianTableDisplayName = this.russianNamesMapper.getTableRussianName(tableName);
+
       // Получаем первые 5 записей из справочника
-      const result = await dbDataSource.query(`SELECT * FROM "${tableName}" LIMIT 5`);
+      const result = await dbDataSource.query(`SELECT * FROM "${russianTableName}" LIMIT 5`);
       
-      this.logger.log(`=== КИРИЛЛИЦА В СПРАВОЧНИКЕ ${tableName} ===`);
+      this.logger.log(`=== КИРИЛЛИЦА В СПРАВОЧНИКЕ ${russianTableName} (${russianTableDisplayName}) ===`);
       
       if (result.length === 0) {
-        this.logger.log(`Справочник ${tableName} пуст`);
+        this.logger.log(`Справочник ${russianTableDisplayName} пуст`);
       } else {
         // Выводим каждую запись
         result.forEach((record, index) => {
           this.logger.log(`Запись ${index + 1}:`);
           Object.entries(record).forEach(([key, value]) => {
+            // Получаем русское название поля
+            const russianFieldName = this.russianNamesMapper.getFieldRussianName(key);
+            
             // Проверяем, содержит ли поле кириллицу
             const hasCyrillic = /[а-яё]/i.test(String(value));
             const status = hasCyrillic ? '✅ КИРИЛЛИЦА' : '📝 ТЕКСТ';
-            this.logger.log(`  ${key}: ${value} (${status})`);
+            this.logger.log(`  ${russianFieldName} (${key}): ${value} (${status})`);
           });
           this.logger.log('---');
         });
@@ -415,11 +447,18 @@ export class MssqlService implements OnModuleInit {
 
       await dbDataSource.initialize();
 
-      // Подготавливаем данные для вставки
-      const columnNames = columns.map(col => `"${col.COLUMN_NAME}"`).join(', ');
+      // Получаем русские названия
+      const russianTableName = this.russianNamesMapper.getPostgresTableName(tableName);
+      
+      // Подготавливаем данные для вставки с русскими названиями полей
+      const columnNames = columns.map(col => {
+        const russianFieldName = this.russianNamesMapper.getPostgresFieldName(col.COLUMN_NAME);
+        return `"${russianFieldName}"`;
+      }).join(', ');
+      
       const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
       
-      const insertSql = `INSERT INTO "${tableName}" (${columnNames}) VALUES (${placeholders})`;
+      const insertSql = `INSERT INTO "${russianTableName}" (${columnNames}) VALUES (${placeholders})`;
       
       // Вставляем записи по одной (можно оптимизировать для батчевой вставки)
       for (const record of records) {

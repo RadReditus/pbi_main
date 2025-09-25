@@ -5,6 +5,7 @@ import { ConfigService } from '../config/config.service';
 import { ServiceStatusService } from '../health/service-status.service';
 import { MssqlChangeTracker } from './mssql-change-tracker.entity';
 import { RecordsService } from '../records/records.service';
+import { RussianNamesMapperService } from './russian-names-mapper.service';
 import * as mssql from 'mssql';
 import * as crypto from 'crypto';
 
@@ -30,6 +31,7 @@ export class MssqlIncrementalService implements OnModuleInit {
     private readonly configService: ConfigService,
     private readonly serviceStatusService: ServiceStatusService,
     private readonly recordsService: RecordsService,
+    private readonly russianNamesMapper: RussianNamesMapperService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -416,11 +418,14 @@ export class MssqlIncrementalService implements OnModuleInit {
 
       await dbDataSource.initialize();
 
+      // Получаем русские названия
+      const russianTableName = this.russianNamesMapper.getPostgresTableName(tableName);
+
       // Получаем структуру таблицы
       const columnsResult = await dbDataSource.query(`
         SELECT column_name 
         FROM information_schema.columns 
-        WHERE table_name = '${tableName}' 
+        WHERE table_name = '${russianTableName}' 
         ORDER BY ordinal_position
       `);
       
@@ -430,14 +435,21 @@ export class MssqlIncrementalService implements OnModuleInit {
       
       for (const record of records) {
         try {
-          const values = columnNames.map(col => record[col]);
+          // Преобразуем названия полей в записи в русские
+          const russianRecord = {};
+          for (const [key, value] of Object.entries(record)) {
+            const russianFieldName = this.russianNamesMapper.getPostgresFieldName(key);
+            russianRecord[russianFieldName] = value;
+          }
+          
+          const values = columnNames.map(col => russianRecord[col]);
           const placeholders = columnNames.map((_, index) => `$${index + 1}`).join(', ');
-          const insertSql = `INSERT INTO "${tableName}" (${columnNames.map(name => `"${name}"`).join(', ')}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`;
+          const insertSql = `INSERT INTO "${russianTableName}" (${columnNames.map(name => `"${name}"`).join(', ')}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`;
           
           await dbDataSource.query(insertSql, values);
           insertedCount++;
         } catch (error) {
-          this.logger.warn(`Failed to insert record in ${tableName}: ${error.message}`);
+          this.logger.warn(`Failed to insert record in ${russianTableName}: ${error.message}`);
         }
       }
 
@@ -461,10 +473,14 @@ export class MssqlIncrementalService implements OnModuleInit {
       });
 
       await dbDataSource.initialize();
-      await dbDataSource.query(`TRUNCATE TABLE "${tableName}"`);
+      
+      // Получаем русское название таблицы
+      const russianTableName = this.russianNamesMapper.getPostgresTableName(tableName);
+      
+      await dbDataSource.query(`TRUNCATE TABLE "${russianTableName}"`);
       await dbDataSource.destroy();
       
-      this.logger.log(`Cleared table ${tableName} in database ${dbName}`);
+      this.logger.log(`Cleared table ${russianTableName} (${tableName}) in database ${dbName}`);
     } catch (error) {
       this.logger.error(`Error clearing table ${tableName}:`, error.stack || error);
       throw error;
