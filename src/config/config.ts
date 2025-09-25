@@ -156,7 +156,7 @@ export function loadConfigFromEnv(): AppSettings {
   // =============================================================================
   // НАСТРОЙКИ MSSQL
   // =============================================================================
-  const mssqlEnabled = getBooleanEnvVar('MSSQL_PTC_DB', false);
+  const mssqlEnabled = getBooleanEnvVar('MSSQL_PTC_DB', true);
   const mssqlDelaySeconds = getNumberEnvVar('MSSQL_DELAY_SECONDS', 30);
   const mssqlTimeoutSeconds = getNumberEnvVar('MSSQL_TIMEOUT_SECONDS', 300);
   
