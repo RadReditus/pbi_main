@@ -184,12 +184,12 @@ export function loadConfigFromEnv(): AppSettings {
       password = getEnvVar('PASS_PTC_REKLAMA_SQL', '');
       port = getNumberEnvVar('PTC_REKLAMA_MSSQL_PORT', 1433);
     } else if (key === 'rts_decaux_reklama') {
-      // Специальная обработка для RTS_DECAUX_REKLAMA
-      server = getEnvVar('RTS_DECAUX_REKLAMA_MSSQL_SERVER', '');
-      database = getEnvVar('RTS_DECAUX_REKLAMA_MSSQL_DATABASE', '');
-      username = getEnvVar('RTS_DECAUX_REKLAMA_MSSQL_USERNAME', '');
-      password = getEnvVar('RTS_DECAUX_REKLAMA_MSSQL_PASSWORD', '');
-      port = getNumberEnvVar('RTS_DECAUX_REKLAMA_MSSQL_PORT', 1433);
+      // Специальная обработка для RTS_DECAUX_REKLAMA (используем REKLAMA_* переменные из .env)
+      server = getEnvVar('REKLAMA_MSSQL_SERVER', '');
+      database = getEnvVar('REKLAMA_MSSQL_DATABASE', '');
+      username = getEnvVar('REKLAMA_MSSQL_USERNAME', '');
+      password = getEnvVar('REKLAMA_MSSQL_PASSWORD', '');
+      port = getNumberEnvVar('REKLAMA_MSSQL_PORT', 1433);
     } else {
       // Стандартная обработка для других баз
       server = getEnvVar(`${key.toUpperCase()}_MSSQL_SERVER`, '');
